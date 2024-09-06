@@ -1,8 +1,9 @@
 use rand::prelude::*;
 use rand::thread_rng;
+use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Suit {
     Clubs,
     Diamonds,
@@ -23,7 +24,7 @@ impl Display for Suit {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Rank {
     Ace,
     Two,
@@ -62,9 +63,27 @@ impl Display for Rank {
     }
 }
 
+#[derive(PartialEq)]
 pub struct Card {
     pub suit: Suit,
     pub rank: Rank,
+}
+
+impl Card {
+    pub fn score(&self) -> i32 {
+        match self.rank {
+            Rank::Ace => 1,
+            Rank::Two => 2,
+            Rank::Three => 3,
+            Rank::Four => 4,
+            Rank::Five => 5,
+            Rank::Six => 6,
+            Rank::Seven => 7,
+            Rank::Eight => 8,
+            Rank::Nine => 9,
+            Rank::Ten | Rank::Jack | Rank::Queen | Rank::King => 10,
+        }
+    }
 }
 
 impl Display for Card {
@@ -86,40 +105,98 @@ impl Hand {
         self.cards.push(card);
     }
 
+    fn set_melds(&self) -> HashMap<Rank, Vec<&Card>> {
+        let mut map: HashMap<Rank, Vec<&Card>> = HashMap::new();
+
+        for c in &self.cards {
+            map.entry(c.rank).or_insert_with(|| Vec::new()).push(c);
+        }
+
+        // only retain sets with 3 or more items in them
+        map.retain(|_, v| v.len() >= 3);
+        map
+    }
+
+    fn run_melds(&self) -> HashMap<Suit, Vec<&Card>> {
+        let mut suit_map: HashMap<Suit, Vec<&Card>> = HashMap::new();
+        let mut map: HashMap<Suit, Vec<&Card>> = HashMap::new();
+
+        for c in &self.cards {
+            suit_map.entry(c.suit).or_insert_with(|| Vec::new()).push(c);
+        }
+
+        // only retain sets with 3 or more items in them
+        // this isn't strictly necessary in this case, but may speed things up?
+        // map.retain(|_, v| v.len() >= 3);
+
+        for (suit, cards) in suit_map {
+            let mut sorted = cards.clone();
+            sorted.sort_by(|a, b| a.rank.cmp(&b.rank));
+
+            let mut current_run: Vec<&Card> = Vec::new();
+            for i in 0..sorted.len() {
+                if current_run.is_empty() {
+                    current_run.push(sorted[i]);
+                } else {
+                    // check last card on current_run vector
+                    // if it is one rank below current [i], add to current_run
+                    if current_run.last().unwrap().rank as i32 + 1 == sorted[i].rank as i32 {
+                        current_run.push(sorted[i]);
+                    // otherwise, check length of current_run
+                    } else {
+                        if current_run.len() >= 3 {
+                            // put this somewhere
+                            map.entry(suit)
+                                .or_insert_with(|| Vec::new())
+                                .extend(current_run.clone());
+                        } else {
+                            // clear current_run
+                            current_run.clear();
+                            current_run.push(sorted[i]);
+                        }
+                    }
+                }
+            }
+        }
+
+        map
+    }
+
+    fn get_melds(&self) -> (HashMap<Suit, Vec<&Card>>, HashMap<Rank, Vec<&Card>>) {
+        // we need a function that accounts for a card potentially being in >1 meld
+        // this function will return the run_melds and the set_melds for consideration in the
+        // card_in_meld function
+        let mut run_melds = self.run_melds();
+        let mut set_melds = self.set_melds();
+
+        for card in &self.cards {
+            if let Some(r) = run_melds.get(&card.suit) {
+                if let Some(s) = set_melds.get(&card.rank) {
+                    // &card is part of both a set meld and a run meld
+                }
+            }
+        }
+    }
+
+    fn card_in_meld(&self, card: &Card) -> bool {
+        let melds = self.run_melds();
+
+        // if let Some(m) = melds.get(&card.rank) {
+        if let Some(m) = melds.get(&card.suit) {
+            m.contains(&card)
+        } else {
+            false
+        }
+    }
+
     pub fn score(&self) -> i32 {
         let mut score = 0;
+
         for card in &self.cards {
-            match card.rank {
-                Rank::Ace => {
-                    score += 1;
-                }
-                Rank::Two => {
-                    score += 2;
-                }
-                Rank::Three => {
-                    score += 3;
-                }
-                Rank::Four => {
-                    score += 4;
-                }
-                Rank::Five => {
-                    score += 5;
-                }
-                Rank::Six => {
-                    score += 6;
-                }
-                Rank::Seven => {
-                    score += 7;
-                }
-                Rank::Eight => {
-                    score += 8;
-                }
-                Rank::Nine => {
-                    score += 9;
-                }
-                Rank::Ten | Rank::Jack | Rank::Queen | Rank::King => {
-                    score += 10;
-                }
+            if self.card_in_meld(&card) {
+                score += 0;
+            } else {
+                score += card.score();
             }
         }
 

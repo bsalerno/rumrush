@@ -21,6 +21,6 @@ pub fn play_game(deck: &mut Deck) {
         dealer.hand.add_card(deck.deal().unwrap());
     }
 
-    println!("Hand: {}", player.hand);
-    println!("Hand: {}", dealer.hand);
+    println!("Hand: {}; Score: {}", player.hand, player.hand.score());
+    println!("Hand: {}; Score: {}", dealer.hand, dealer.hand.score());
 }
